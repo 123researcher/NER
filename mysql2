@@ -1,0 +1,8 @@
+SELECT 
+
+    "Termination Date"
+  
+FROM
+    Argus_DataFeeds.Workday
+WHERE
+    "Associate Name" IN ('Sudan Harpreet' , 'Patel Urvish');
