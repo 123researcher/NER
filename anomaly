@@ -1,0 +1,49 @@
+import pandas as pd
+from analytics.customer_costs import pull_org_costs
+
+# heuristic values
+threshold_relative = 1.25
+threshold_std = 1.5
+threshold_absolute = 10
+history_period_days = 14
+
+# minimum change from previous day to include in report
+change_threshold = 1
+
+def find_anomaly(row):
+    return (
+    (row['total'] >= row['mean'] * threshold_relative) &
+    (row['total'] >= row['mean'] + threshold_std * row['std']) &
+    (row['total'] >= threshold_absolute)
+    )
+
+def get_changes(date, df):
+    change_dict = {}
+    shifted = df.shift()
+    for column in df.columns:
+        change = df.loc[date,column] - shifted.loc[date,column]
+        if change > change_threshold: change_dict[column] = change
+    return change_dict
+
+def detect_anoms(org_id):
+    costs = pull_org_costs(org_id)
+    total = costs['total']
+    total = total[total.index.day!=1].copy() # remove first of month    
+    
+    total_stats = pd.DataFrame(total)
+    total_stats['std'] = total_stats['total'].rolling(history_period_days).std()
+    total_stats['mean'] = total_stats['total'].rolling(history_period_days).mean()
+    
+    anom = total_stats.apply(find_anomaly, axis=1)
+    anom_dates = list(total[anom].index)
+    
+    root_causes = {}
+    cost_types = ['cost_by_service', 'cost_by_region', 'cost_by_account']
+    for date in anom_dates:
+        costs_by_type = {}
+        for cost_type in cost_types:
+            changes = get_changes(date, costs[cost_type])
+            costs_by_type[cost_type] = changes
+        root_causes[date] = costs_by_type
+    
+    return anom_dates, root_causes # list of dates, dict of dicts
